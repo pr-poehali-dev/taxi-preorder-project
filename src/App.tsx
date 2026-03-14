@@ -1,15 +1,30 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Icon from "@/components/ui/icon";
+
+const API = "https://functions.poehali.dev/424e9b96-e72f-43df-bff3-dd0f3450ab89";
 
 type Page = "home" | "booking" | "orders" | "routes" | "profile" | "support";
 
-const CITIES = ["Москва", "Санкт-Петербург", "Казань", "Нижний Новгород", "Екатеринбург", "Самара", "Уфа", "Краснодар", "Воронеж", "Ярославль"];
+interface Order {
+  id: number;
+  order_number: string;
+  city_from: string;
+  city_to: string;
+  trip_date: string;
+  trip_time: string;
+  passengers: number;
+  comment: string;
+  price: number;
+  status: string;
+  driver_name: string;
+  driver_rating: number;
+  driver_car: string;
+  passenger_name: string;
+  passenger_phone: string;
+  created_at: string;
+}
 
-const MOCK_ORDERS = [
-  { id: "МГ-7821", from: "Москва", to: "Тверь", date: "15 марта, 09:00", status: "upcoming", price: "2 400 ₽", driver: "Алексей К.", rating: 4.9, car: "Toyota Camry • A 345 МО" },
-  { id: "МГ-7654", from: "Тверь", to: "Москва", date: "10 марта, 14:00", status: "done", price: "2 400 ₽", driver: "Дмитрий Р.", rating: 4.7, car: "Kia K5 • В 112 СС" },
-  { id: "МГ-7401", from: "Москва", to: "Ярославль", date: "2 марта, 07:30", status: "done", price: "4 800 ₽", driver: "Сергей М.", rating: 5.0, car: "Skoda Octavia • К 789 ОМ" },
-];
+const CITIES = ["Москва", "Санкт-Петербург", "Казань", "Нижний Новгород", "Екатеринбург", "Самара", "Уфа", "Краснодар", "Воронеж", "Ярославль", "Тверь"];
 
 const MOCK_ROUTES = [
   { from: "Москва", to: "Санкт-Петербург", distance: "714 км", duration: "~8 ч", price: "от 7 500 ₽", popular: true },
@@ -131,11 +146,34 @@ function HomePage({ onBook }: { onBook: () => void }) {
   );
 }
 
-function BookingPage() {
+function BookingPage({ onOrderCreated }: { onOrderCreated: () => void }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ from: "", to: "", date: "", time: "", passengers: "1", comment: "" });
+  const [loading, setLoading] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
 
   const update = (k: string, v: string) => setForm(prev => ({ ...prev, [k]: v }));
+
+  const submitOrder = async () => {
+    setLoading(true);
+    const res = await fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        city_from: form.from,
+        city_to: form.to,
+        trip_date: form.date,
+        trip_time: form.time,
+        passengers: parseInt(form.passengers),
+        comment: form.comment,
+      }),
+    });
+    const data = await res.json();
+    setCreatedOrder(data.order);
+    setLoading(false);
+    setStep(4);
+    onOrderCreated();
+  };
 
   const inputCls = "w-full glass rounded-xl px-4 py-3.5 text-sm outline-none transition-all text-white placeholder:text-white/30 border border-white/5 focus:border-neon-yellow/40 bg-transparent";
   const labelCls = "block text-xs text-white/40 mb-1.5 font-medium";
@@ -257,22 +295,23 @@ function BookingPage() {
           </div>
           <div className="flex gap-3">
             <button onClick={() => setStep(2)} className="btn-ghost-neon flex-none rounded-2xl px-5 py-4 font-bold">←</button>
-            <button onClick={() => setStep(4)} className="btn-neon flex-1 rounded-2xl py-4 font-bold">
-              Подтвердить заказ ✓
+            <button onClick={submitOrder} disabled={loading} className="btn-neon flex-1 rounded-2xl py-4 font-bold disabled:opacity-50">
+              {loading ? "Оформляем..." : "Подтвердить заказ ✓"}
             </button>
           </div>
         </div>
       )}
 
-      {step === 4 && (
+      {step === 4 && createdOrder && (
         <div className="text-center py-10 animate-scale-in">
           <div className="w-24 h-24 rounded-full glass-bright flex items-center justify-center mx-auto mb-6 pulse-neon">
             <span className="text-4xl">✓</span>
           </div>
           <h2 className="text-2xl font-black mb-2">Заказ принят!</h2>
-          <p className="text-white/50 text-sm mb-2">Номер заказа: <span className="neon-yellow font-bold">МГ-8012</span></p>
-          <p className="text-white/40 text-xs mb-8">Водитель будет назначен в течение 10 минут.<br />Вы получите уведомление.</p>
-          <button onClick={() => setStep(1)} className="btn-ghost-neon rounded-2xl px-8 py-3.5 font-bold">
+          <p className="text-white/50 text-sm mb-2">Номер заказа: <span className="neon-yellow font-bold">{createdOrder.order_number}</span></p>
+          <p className="text-white/40 text-xs mb-2">Водитель: <span className="text-white/70">{createdOrder.driver_name}</span></p>
+          <p className="text-white/40 text-xs mb-8">{createdOrder.driver_car}</p>
+          <button onClick={() => { setStep(1); setCreatedOrder(null); setForm({ from: "", to: "", date: "", time: "", passengers: "1", comment: "" }); }} className="btn-ghost-neon rounded-2xl px-8 py-3.5 font-bold">
             Новый заказ
           </button>
         </div>
@@ -281,10 +320,26 @@ function BookingPage() {
   );
 }
 
-function OrdersPage() {
+function OrdersPage({ refresh }: { refresh: number }) {
   const [tab, setTab] = useState<"active" | "history">("active");
-  const active = MOCK_ORDERS.filter(o => o.status === "upcoming");
-  const history = MOCK_ORDERS.filter(o => o.status !== "upcoming");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchOrders = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch(API);
+    const data = await res.json();
+    setOrders(data.orders || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders, refresh]);
+
+  const active = orders.filter(o => o.status === "upcoming");
+  const history = orders.filter(o => o.status !== "upcoming");
+  const list = tab === "active" ? active : history;
+
+  const formatDate = (d: string, t: string) => `${d} в ${t}`;
 
   return (
     <div className="px-4 pb-6 pt-4 animate-fade-in">
@@ -300,53 +355,69 @@ function OrdersPage() {
         ))}
       </div>
 
-      <div className="space-y-3">
-        {(tab === "active" ? active : history).map((o, i) => (
-          <div key={o.id} className="glass rounded-2xl p-4 card-hover animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs text-white/30 font-mono">{o.id}</span>
-                  <StatusBadge status={o.status} />
-                </div>
-                <div className="font-bold">{o.from} → {o.to}</div>
-              </div>
-              <div className="font-black neon-yellow">{o.price}</div>
-            </div>
-            <div className="flex items-center gap-2 mb-3 text-xs text-white/40">
-              <Icon name="Calendar" size={12} />
-              <span>{o.date}</span>
-            </div>
-            <div className="h-px bg-white/5 mb-3" />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-yellow/20 to-neon-cyan/20 flex items-center justify-center text-xs font-bold">
-                  {o.driver[0]}
-                </div>
+      {loading && (
+        <div className="text-center py-16 text-white/30">
+          <div className="w-8 h-8 border-2 border-neon-yellow/30 border-t-neon-yellow rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm">Загрузка...</p>
+        </div>
+      )}
+
+      {!loading && (
+        <div className="space-y-3">
+          {list.map((o, i) => (
+            <div key={o.id} className="glass rounded-2xl p-4 card-hover animate-fade-in" style={{ animationDelay: `${i * 0.05}s` }}>
+              <div className="flex items-start justify-between mb-3">
                 <div>
-                  <div className="text-sm font-medium">{o.driver}</div>
-                  <div className="text-xs text-white/30">{o.car}</div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs text-white/30 font-mono">{o.order_number}</span>
+                    <StatusBadge status={o.status} />
+                  </div>
+                  <div className="font-bold">{o.city_from} → {o.city_to}</div>
                 </div>
+                <div className="font-black neon-yellow">{o.price.toLocaleString("ru")} ₽</div>
               </div>
-              <div className="flex items-center gap-1">
-                <StarRating value={o.rating} />
-                <span className="text-xs text-white/40 ml-1">{o.rating}</span>
+              <div className="flex items-center gap-2 mb-3 text-xs text-white/40">
+                <Icon name="Calendar" size={12} />
+                <span>{formatDate(o.trip_date, o.trip_time)}</span>
+                <span className="text-white/20">·</span>
+                <Icon name="Users" size={12} />
+                <span>{o.passengers} пасс.</span>
               </div>
+              {o.driver_name && (
+                <>
+                  <div className="h-px bg-white/5 mb-3" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-yellow/20 to-neon-cyan/20 flex items-center justify-center text-xs font-bold">
+                        {o.driver_name[0]}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">{o.driver_name}</div>
+                        <div className="text-xs text-white/30">{o.driver_car}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <StarRating value={o.driver_rating} />
+                      <span className="text-xs text-white/40 ml-1">{o.driver_rating}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+              {o.status === "upcoming" && (
+                <button className="btn-ghost-neon w-full mt-3 rounded-xl py-2.5 text-sm font-bold">
+                  Позвонить водителю
+                </button>
+              )}
             </div>
-            {o.status === "upcoming" && (
-              <button className="btn-ghost-neon w-full mt-3 rounded-xl py-2.5 text-sm font-bold">
-                Позвонить водителю
-              </button>
-            )}
-          </div>
-        ))}
-        {(tab === "active" ? active : history).length === 0 && (
-          <div className="text-center py-16 text-white/30">
-            <Icon name="PackageOpen" size={48} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Нет заказов</p>
-          </div>
-        )}
-      </div>
+          ))}
+          {list.length === 0 && (
+            <div className="text-center py-16 text-white/30">
+              <Icon name="PackageOpen" size={48} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">Нет заказов</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -548,6 +619,7 @@ function SupportPage() {
 
 export default function App() {
   const [page, setPage] = useState<Page>("home");
+  const [ordersRefresh, setOrdersRefresh] = useState(0);
 
   const nav = [
     { id: "home" as Page, icon: "Home", label: "Главная" },
@@ -559,6 +631,7 @@ export default function App() {
   ];
 
   const goBooking = () => setPage("booking");
+  const onOrderCreated = () => setOrdersRefresh(r => r + 1);
 
   return (
     <div className="min-h-screen bg-[var(--deep-bg)] flex flex-col max-w-md mx-auto">
@@ -577,8 +650,8 @@ export default function App() {
 
       <main className="flex-1 overflow-y-auto">
         {page === "home" && <HomePage onBook={goBooking} />}
-        {page === "booking" && <BookingPage />}
-        {page === "orders" && <OrdersPage />}
+        {page === "booking" && <BookingPage onOrderCreated={onOrderCreated} />}
+        {page === "orders" && <OrdersPage refresh={ordersRefresh} />}
         {page === "routes" && <RoutesPage onBook={goBooking} />}
         {page === "profile" && <ProfilePage />}
         {page === "support" && <SupportPage />}

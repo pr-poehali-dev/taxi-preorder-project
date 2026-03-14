@@ -1,0 +1,30 @@
+{
+  "tests": [
+    {
+      "name": "GET orders list",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {"orders": []},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "POST create order",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "city_from": "Москва",
+        "city_to": "Тверь",
+        "trip_date": "2026-03-20",
+        "trip_time": "10:00",
+        "passengers": 2,
+        "comment": "Тест",
+        "passenger_name": "Иван",
+        "passenger_phone": "+79161234567"
+      },
+      "expectedStatus": 201,
+      "expectedBody": {"order": {"city_from": "Москва"}},
+      "bodyMatcher": "partial"
+    }
+  ]
+}
